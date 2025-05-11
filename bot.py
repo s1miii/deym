@@ -7,9 +7,9 @@ from telegram.error import TelegramError
 import os
 
 # --- CONFIG (filled manually) ---
-bot_token = '7915679077:AAGtiiiwdD8_hCkHHjkZc8881ow1MjGAlTw'
-channel_chat_id = '-1002546564669'
-covalent_api_key = 'cqt_rQTWFJ7gRk7hb8JFwX4BQrWx43tV'
+bot_token ="8168382591:AAGnff-BMUkECXaQ9FXe5-aJoq6a_lcoKYU"
+channel_chat_id ="-1002523679028"
+covalent_api_key ="cqt_rQTWFJ7gRk7hb8JFwX4BQrWx43tV"
 
 # --- Flask keep_alive server ---
 app = Flask('')
