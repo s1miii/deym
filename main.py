@@ -104,60 +104,63 @@ async def main():
                 for group in groups:
                     group_id = str(group.get('row_id'))
 
-                    if group_id not in notified_group_ids:
-                        token_name = group.get('token_name', 'N/A')
-                        token_symbol = group.get('token_symbol', 'N/A')
-                        contract_address = group.get('token_contract_address', 'N/A')
-                        creator_address = group.get('creator_address', 'N/A')
-                        create_time = group.get('create_time', 'N/A')
-                        latest_price_usd = group.get('latest_price_usd', 0.0)
+                    # Prevent repeated messages
+                    if group_id in notified_group_ids:
+                        continue  # Skip processing if already notified
 
-                        arena_creator_link = f"https://arena.trade/user/{creator_address}"
-                        arena_token_link = f"https://starsarena.com/community/{contract_address}/trade"
+                    token_name = group.get('token_name', 'N/A')
+                    token_symbol = group.get('token_symbol', 'N/A')
+                    contract_address = group.get('token_contract_address', 'N/A')
+                    creator_address = group.get('creator_address', 'N/A')
+                    create_time = group.get('create_time', 'N/A')
+                    latest_price_usd = group.get('latest_price_usd', 0.0)
 
-                        twitter_handle = group.get('creator_twitter_handle', 'N/A')
-                        twitter_followers = group.get('creator_twitter_followers', 0)
-                        twitter_info = f"[@{twitter_handle}](https://twitter.com/{twitter_handle}) ({twitter_followers} followers)" if twitter_handle else "Not Available"
+                    arena_creator_link = f"https://arena.trade/user/{creator_address}"
+                    arena_token_link = f"https://starsarena.com/community/{contract_address}/trade"
 
-                        is_image_token = group.get('is_image_token', False)
-                        image_token_line = "🖼 *Image Token*\n" if is_image_token else ""
+                    twitter_handle = group.get('creator_twitter_handle', 'N/A')
+                    twitter_followers = group.get('creator_twitter_followers', 0)
+                    twitter_info = f"[@{twitter_handle}](https://twitter.com/{twitter_handle}) ({twitter_followers} followers)" if twitter_handle else "Not Available"
 
-                        # Get creator's purchase info
-                        amount_bought, usd_bought = get_creator_purchase_info(
-                            creator_address, contract_address, latest_price_usd, covalent_api_key
-                        )
+                    is_image_token = group.get('is_image_token', False)
+                    image_token_line = "🖼 *Image Token*\n" if is_image_token else ""
 
-                        # Build message
-                        message = (
-                            f"🚀 *New Token Alert!*\n\n"
-                            f"*Token:* {token_name} ({token_symbol})\n"
-                            f"{image_token_line}"
-                            f"*View on Arena:* [Click Here]({arena_token_link})\n"
-                            f"*Creator:* [View Profile]({arena_creator_link})\n"
-                            f"*Twitter:* {twitter_info}\n"
-                            f"*Launch Time:* {create_time}\n"
-                            f"*Price:* ${latest_price_usd:.10f}\n"
-                        )
+                    # Get creator's purchase info
+                    amount_bought, usd_bought = get_creator_purchase_info(
+                        creator_address, contract_address, latest_price_usd, covalent_api_key
+                    )
 
-                        if amount_bought > 0:
-                            message += f"\n🔍 *Creator bought their own token:* {amount_bought:.4f} {token_symbol} (~${usd_bought:.2f})"
+                    # Build message
+                    message = (
+                        f"🚀 *New Token Alert!*\n\n"
+                        f"*Token:* {token_name} ({token_symbol})\n"
+                        f"{image_token_line}"
+                        f"*View on Arena:* [Click Here]({arena_token_link})\n"
+                        f"*Creator:* [View Profile]({arena_creator_link})\n"
+                        f"*Twitter:* {twitter_info}\n"
+                        f"*Launch Time:* {create_time}\n"
+                        f"*Price:* ${latest_price_usd:.10f}\n"
+                    )
 
-                        try:
-                            await bot.send_message(chat_id=channel_chat_id, text=message, parse_mode='Markdown')
-                            print(f"Sent notification for {token_name}")
-                            
-                            # Save notified ID
-                            notified_group_ids.add(group_id)
-                            with open("notified.txt", "a") as f:
-                                f.write(f"{group_id}\n")
+                    if amount_bought > 0:
+                        message += f"\n🔍 *Creator bought their own token:* {amount_bought:.4f} {token_symbol} (~${usd_bought:.2f})"
 
-                        except TelegramError as e:
-                            print(f"Telegram error: {e}")
-                            if "retry after" in str(e).lower():
-                                retry_time = int(str(e).split()[-2]) + 1
-                                print(f"Waiting {retry_time} seconds before retry...")
-                                await asyncio.sleep(retry_time)
-                            continue
+                    try:
+                        await bot.send_message(chat_id=channel_chat_id, text=message, parse_mode='Markdown')
+                        print(f"Sent notification for {token_name}")
+
+                        # Save notified ID
+                        notified_group_ids.add(group_id)
+                        with open("notified.txt", "a") as f:
+                            f.write(f"{group_id}\n")
+
+                    except TelegramError as e:
+                        print(f"Telegram error: {e}")
+                        if "retry after" in str(e).lower():
+                            retry_time = int(str(e).split()[-2]) + 1
+                            print(f"Waiting {retry_time} seconds before retry...")
+                            await asyncio.sleep(retry_time)
+                        continue
 
             else:
                 print(f"Failed to fetch data from Arena API: {response.status_code}")
@@ -170,3 +173,4 @@ async def main():
 if __name__ == "__main__":
     keep_alive()
     asyncio.run(main())
+
