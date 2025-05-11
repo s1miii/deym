@@ -1,17 +1,81 @@
+import os
 import asyncio
 import requests
-import time
+from flask import Flask
+from threading import Thread
 from telegram import Bot
 from telegram.error import TelegramError
 
-# Initialize Telegram bot
-bot_token = '7915679077:AAGtiiiwdD8_hCkHHjkZc8881ow1MjGAlTw'
-channel_chat_id = '-1002546564669'
+# --- Flask keep_alive server ---
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is alive!"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# --- Telegram bot setup ---
+bot_token = os.getenv('BOT_TOKEN')
+channel_chat_id = os.getenv('CHAT_ID')
 bot = Bot(token=bot_token)
 
-# Store IDs of already notified groups
 notified_group_ids = set()
 
+# Covalent API Key
+covalent_api_key = os.getenv("COVALENT_API_KEY")
+
+# Function to check if the creator bought their own token and return the amount in tokens and USD
+def get_creator_purchase_info(creator_address, token_contract_address, token_price_usd, covalent_api_key):
+    try:
+        url = f"https://api.covalenthq.com/v1/43114/address/{creator_address}/transfers_v2/"
+        params = {
+            "contract-address": token_contract_address,
+            "key": covalent_api_key,
+            "page-size": 100
+        }
+
+        res = requests.get(url, params=params)
+        print(f"Covalent API Response: {res.status_code} - {res.text}")
+
+        if res.status_code == 200:
+            data = res.json()
+            items = data.get("data", {}).get("items", [])
+
+            total_bought = 0
+            decimals = 18
+
+            for item in items:
+                transfers = item.get("transfers", [])
+                for transfer in transfers:
+                    if transfer.get("contract_address", "").lower() == token_contract_address.lower():
+                        decimals = int(transfer.get("contract_decimals", 18))
+                        to_address = transfer.get("to_address", "").lower()
+                        if to_address == creator_address.lower():
+                            delta = int(transfer.get("delta", "0"))
+                            total_bought += delta
+
+            if total_bought > 0:
+                token_amount = total_bought / (10 ** decimals)
+                usd_value = token_amount * token_price_usd
+                print(f"Found creator buy: {token_amount} tokens (${usd_value})")
+                return token_amount, usd_value
+
+            print(f"No creator buys found for {token_contract_address}")
+            return 0, 0
+        else:
+            print(f"Covalent API error: {res.text}")
+            return 0, 0
+    except Exception as e:
+        print(f"Error checking creator buys: {e}")
+        return 0, 0
+
+# Main bot loop to fetch new token launches
 async def main():
     print("Bot started! Press Ctrl+C to stop.")
     while True:
@@ -27,12 +91,11 @@ async def main():
                 'order': 'create_time.desc'
             }
             response = requests.get(url, headers=headers, params=params)
-            
-            print(f"API Response: {response.text}")  # Debug line
-            
+
+            print(f"Arena API Response: {response.status_code} - {response.text}")
+
             if response.status_code == 200:
                 groups = response.json()
-                
                 for group in groups:
                     group_id = group.get('row_id')
                     if group_id not in notified_group_ids:
@@ -50,17 +113,32 @@ async def main():
                         twitter_handle = group.get('creator_twitter_handle', 'N/A')
                         twitter_followers = group.get('creator_twitter_followers', 0)
                         twitter_info = f"[@{twitter_handle}](https://twitter.com/{twitter_handle}) ({twitter_followers} followers)" if twitter_handle else "Not Available"
-                        
+
+                        # Check if token is an image token
+                        is_image_token = group.get('is_image_token', False)
+                        image_token_line = "🖼 *Image Token*\n" if is_image_token else ""
+
+                        # Get creator's token purchase info
+                        amount_bought, usd_bought = get_creator_purchase_info(
+                            creator_address, contract_address, latest_price_usd, covalent_api_key
+                        )
+
+                        # Construct the Telegram message
                         message = (
                             f"🚀 *New Token Alert!*\n\n"
                             f"*Token:* {token_name} ({token_symbol})\n"
+                            f"{image_token_line}"
                             f"*View on Arena:* [Click Here]({arena_token_link})\n"
                             f"*Creator:* [View Profile]({arena_creator_link})\n"
                             f"*Twitter:* {twitter_info}\n"
                             f"*Launch Time:* {create_time}\n"
-                            f"*Price:* ${latest_price_usd:.10f}"
+                            f"*Price:* ${latest_price_usd:.10f}\n"
                         )
 
+                        if amount_bought > 0:
+                            message += f"\n🔍 *Creator bought their own token:* {amount_bought:.4f} {token_symbol} (~${usd_bought:.2f})"
+
+                        # Send the message to Telegram
                         try:
                             await bot.send_message(chat_id=channel_chat_id, text=message, parse_mode='Markdown')
                             notified_group_ids.add(group_id)
@@ -72,15 +150,15 @@ async def main():
                                 print(f"Waiting {retry_time} seconds before retry...")
                                 await asyncio.sleep(retry_time)
                             continue
-
             else:
-                print(f"Failed to fetch data: {response.status_code}")
-
+                print(f"Failed to fetch data from Arena API: {response.status_code}")
         except Exception as e:
             print(f"Error: {e}")
 
-        # Wait longer between checks to avoid rate limits
-        await asyncio.sleep(1)  # Check every 10 seconds
+        await asyncio.sleep(10)  # Wait 10 seconds before next check
 
+# --- Run Flask + Bot ---
 if __name__ == "__main__":
+    keep_alive()
     asyncio.run(main())
+
