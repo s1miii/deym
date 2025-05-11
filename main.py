@@ -7,9 +7,9 @@ from telegram.error import TelegramError
 import os
 
 # --- CONFIG (filled manually) ---
-bot_token ="8168382591:AAGnff-BMUkECXaQ9FXe5-aJoq6a_lcoKYU"
-channel_chat_id ="-1002523679028"
-covalent_api_key ="cqt_rQTWFJ7gRk7hb8JFwX4BQrWx43tV"
+bot_token = '7915679077:AAGtiiiwdD8_hCkHHjkZc8881ow1MjGAlTw'
+channel_chat_id = '-1002546564669'
+covalent_api_key = 'cqt_rQTWFJ7gRk7hb8JFwX4BQrWx43tV'
 
 # --- Flask keep_alive server ---
 app = Flask('')
@@ -122,8 +122,8 @@ async def main():
                     twitter_followers = group.get('creator_twitter_followers', 0)
                     twitter_info = f"[@{twitter_handle}](https://twitter.com/{twitter_handle}) ({twitter_followers} followers)" if twitter_handle else "Not Available"
 
-                    is_image_token = group.get('is_image_token', False)
-                    image_token_line = "🖼 *Image Token*\n" if is_image_token else ""
+                    photo_url = group.get('photo_url')
+                    image_token_line = "🖼 *Image Token*\n" if photo_url else ""
 
                     # Get creator's purchase info
                     amount_bought, usd_bought = get_creator_purchase_info(
@@ -146,8 +146,8 @@ async def main():
                         message += f"\n🔍 *Creator bought their own token:* {amount_bought:.4f} {token_symbol} (~${usd_bought:.2f})"
 
                     try:
-                        # Use await correctly here
-                        await bot.send_message(chat_id=channel_chat_id, text=message, parse_mode='Markdown')
+                        # Send message without await
+                        bot.send_message(chat_id=channel_chat_id, text=message, parse_mode='Markdown')
                         print(f"Sent notification for {token_name}")
 
                         # Save notified ID
@@ -168,7 +168,7 @@ async def main():
         except Exception as e:
             print(f"Error: {e}")
 
-        await asyncio.sleep(10)  # Check every 10 seconds
+        await asyncio.sleep(5)  # Check every 10 seconds
 
 # --- Run Flask + Bot ---
 if __name__ == "__main__":
