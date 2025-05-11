@@ -4,11 +4,12 @@ from flask import Flask
 from threading import Thread
 from telegram import Bot
 from telegram.error import TelegramError
+import os
 
-# --- Config ---
-bot_token = "7915679077:AAGtiiiwdD8_hCkHHjkZc8881ow1MjGAlTw"
-channel_chat_id = "-1002546564669"
-covalent_api_key = "cqt_rQTWFJ7gRk7hb8JFwX4BQrWx43tV"
+# --- CONFIG (filled manually) ---
+bot_token ="7915679077:AAGtiiiwdD8_hCkHHjkZc8881ow1MjGAlTw"
+channel_chat_id ="-1002546564669"
+covalent_api_key ="cqt_rQTWFJ7gRk7hb8JFwX4BQrWx43tV"
 
 # --- Flask keep_alive server ---
 app = Flask('')
@@ -26,9 +27,15 @@ def keep_alive():
 
 # --- Telegram bot setup ---
 bot = Bot(token=bot_token)
-notified_group_ids = set()
 
-# Function to check if the creator bought their own token
+# Load notified group IDs from file if exists
+if os.path.exists("notified.txt"):
+    with open("notified.txt", "r") as f:
+        notified_group_ids = set(f.read().splitlines())
+else:
+    notified_group_ids = set()
+
+# Function to check if creator bought their own token
 def get_creator_purchase_info(creator_address, token_contract_address, token_price_usd, covalent_api_key):
     try:
         url = f"https://api.covalenthq.com/v1/43114/address/{creator_address}/transfers_v2/"
@@ -44,6 +51,7 @@ def get_creator_purchase_info(creator_address, token_contract_address, token_pri
         if res.status_code == 200:
             data = res.json()
             items = data.get("data", {}).get("items", [])
+
             total_bought = 0
             decimals = 18
 
@@ -72,23 +80,30 @@ def get_creator_purchase_info(creator_address, token_contract_address, token_pri
         print(f"Error checking creator buys: {e}")
         return 0, 0
 
-# Main loop
+# Main bot loop to fetch new token launches
 async def main():
     print("Bot started! Press Ctrl+C to stop.")
     while True:
         try:
             print("Fetching latest token launches...")
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (compatible; TokenBot/1.0)',
+                'Accept': 'application/json'
+            }
             url = 'https://api.arena.trade/groups_plus'
-            params = {'limit': 1, 'order': 'create_time.desc'}
-            headers = {'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json'}
-
+            params = {
+                'limit': 1,
+                'order': 'create_time.desc'
+            }
             response = requests.get(url, headers=headers, params=params)
+
             print(f"Arena API Response: {response.status_code} - {response.text}")
 
             if response.status_code == 200:
                 groups = response.json()
                 for group in groups:
-                    group_id = group.get('row_id')
+                    group_id = str(group.get('row_id'))
+
                     if group_id not in notified_group_ids:
                         token_name = group.get('token_name', 'N/A')
                         token_symbol = group.get('token_symbol', 'N/A')
@@ -100,17 +115,19 @@ async def main():
                         arena_creator_link = f"https://arena.trade/user/{creator_address}"
                         arena_token_link = f"https://starsarena.com/community/{contract_address}/trade"
 
-                        twitter_handle = group.get('creator_twitter_handle', '')
+                        twitter_handle = group.get('creator_twitter_handle', 'N/A')
                         twitter_followers = group.get('creator_twitter_followers', 0)
                         twitter_info = f"[@{twitter_handle}](https://twitter.com/{twitter_handle}) ({twitter_followers} followers)" if twitter_handle else "Not Available"
 
                         is_image_token = group.get('is_image_token', False)
                         image_token_line = "🖼 *Image Token*\n" if is_image_token else ""
 
+                        # Get creator's purchase info
                         amount_bought, usd_bought = get_creator_purchase_info(
                             creator_address, contract_address, latest_price_usd, covalent_api_key
                         )
 
+                        # Build message
                         message = (
                             f"🚀 *New Token Alert!*\n\n"
                             f"*Token:* {token_name} ({token_symbol})\n"
@@ -127,8 +144,13 @@ async def main():
 
                         try:
                             await bot.send_message(chat_id=channel_chat_id, text=message, parse_mode='Markdown')
-                            notified_group_ids.add(group_id)
                             print(f"Sent notification for {token_name}")
+                            
+                            # Save notified ID
+                            notified_group_ids.add(group_id)
+                            with open("notified.txt", "a") as f:
+                                f.write(f"{group_id}\n")
+
                         except TelegramError as e:
                             print(f"Telegram error: {e}")
                             if "retry after" in str(e).lower():
@@ -136,14 +158,15 @@ async def main():
                                 print(f"Waiting {retry_time} seconds before retry...")
                                 await asyncio.sleep(retry_time)
                             continue
+
             else:
-                print("Failed to fetch data from Arena API.")
+                print(f"Failed to fetch data from Arena API: {response.status_code}")
         except Exception as e:
             print(f"Error: {e}")
 
-        await asyncio.sleep(10)
+        await asyncio.sleep(10)  # Check every 10 seconds
 
-# --- Run ---
+# --- Run Flask + Bot ---
 if __name__ == "__main__":
     keep_alive()
     asyncio.run(main())
