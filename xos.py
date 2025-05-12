@@ -8,9 +8,9 @@ import os
 import time
 
 # --- CONFIG ---
-bot_token = "8168382591:AAGnff-BMUkECXaQ9FXe5-aJoq6a_lcoKYU"
-channel_chat_id = "-1002523679028"
-covalent_api_key = "cqt_rQTWFJ7gRk7hb8JFwX4BQrWx43tV"
+bot_token = '7915679077:AAGtiiiwdD8_hCkHHjkZc8881ow1MjGAlTw'
+channel_chat_id = '-1002546564669'
+covalent_api_key = 'cqt_rQTWFJ7gRk7hb8JFwX4BQrWx43tV'
 
 # --- Flask keep_alive server ---
 app = Flask('')
@@ -122,6 +122,13 @@ async def main():
                     group_id = str(group.get('row_id'))
                     if group_id in notified_group_ids:
                         continue
+                        
+                    # Skip if creator has multiple tokens
+                    creator_address = group.get('creator_address', '')
+                    creator_token_count = get_creator_token_count(creator_address)
+                    if creator_token_count > 1:
+                        print(f"Skipping token - creator has {creator_token_count} tokens")
+                        continue
 
                     token_name = group.get('token_name', 'N/A')
                     token_symbol = group.get('token_symbol', 'N/A')
@@ -147,7 +154,8 @@ async def main():
                     )
 
                     creator_token_count = get_creator_token_count(creator_address)
-                    farmer_tag = " *[🌾🌾FARMER🌾🌾]*" if creator_token_count > 1 else ""
+                    farmer_tag = " *[🌾FARMER🌾]*" if creator_token_count > 1 else ""
+                    token_count_display = f" [*{creator_token_count}* token{'s' if creator_token_count != 1 else ''}]"
 
                     message = (
                         f"🚀 *New Token Alert!*\n\n"
@@ -156,14 +164,14 @@ async def main():
                         f"*Trade Links:*\n"
                         f"[ArenaBook]({arenabook_link}) | [Arena Trade]({arena_trade_link}) | [StarsArena]({starsarena_link})\n\n"
                         f"*Contract Address:* `{contract_address}`\n\n"
-                        f"*Creator:* [View Profile]({arena_creator_link}){farmer_tag}\n"
+                        f"*Creator:* [View Profile]({arena_creator_link}){farmer_tag}{token_count_display}\n"
                         f"*Twitter:* {twitter_info}\n"
                         f"*Launch Time:* {create_time}\n"
                         f"*Price:* ${latest_price_usd:.10f}\n"
                     )
 
                     if amount_bought > 0:
-                        message += f"\n🔍 *Creator bought their own token:* {amount_bought:.4f} {token_symbol} (~${usd_bought:.2f})"
+                        message += f"\n🔍 *Creator buy :* {amount_bought:.4f} {token_symbol} (~${usd_bought:.2f})"
 
                     try:
                         if photo_url:
@@ -195,5 +203,3 @@ async def main():
 if __name__ == "__main__":
     keep_alive()
     asyncio.run(main())
-
-        await asyncio.sleep(5)  # Check every 5 seconds
